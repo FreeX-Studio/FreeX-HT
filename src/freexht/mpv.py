@@ -39,8 +39,13 @@ def mpv_conf(opts: Dict[str, str], include: Optional[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def default_options(hwdec: str, audio_device: str, passthrough: str, vo: str, small_memory: bool, user_agent: str) -> Dict[str, str]:
-    opts = {
+def default_options(hwdec: str, audio_device: str, passthrough: str, vo: str, small_memory: bool, user_agent: str,
+                    fast: bool = False) -> Dict[str, str]:
+    opts = {}
+    if fast:
+        # Simple scaling, no dithering or HDR peak detection: far less work for a small GPU.
+        opts["profile"] = "fast"
+    opts.update({
         "vo": vo or "gpu",
         "gpu-context": "wayland",
         "hwdec": hwdec,
@@ -75,7 +80,7 @@ def default_options(hwdec: str, audio_device: str, passthrough: str, vo: str, sm
         "user-agent": user_agent,
         "volume": "100",
         "volume-max": "100",
-    }
+    })
     if passthrough:
         opts["audio-spdif"] = passthrough
     return opts
@@ -112,6 +117,7 @@ class Mpv:
         self.duration = 0.0
         self.paused = True
         self.buffering = False
+        self.drops = {}
 
     # ---------------------------------------------------------------- process
 
@@ -270,12 +276,15 @@ class Mpv:
                 self.ready_sent = True
                 self.emit(self.state("ready"))
                 self.emit({"type": "buffering", "on": False})
+                asyncio.get_running_loop().create_task(self._log_playback())
             elif self.loaded:
                 self.emit(self.state("time"))
         elif ev == "end-file":
             entry = msg.get("playlist_entry_id")
             if entry is not None and self.entry is not None and entry != self.entry:
                 return  # the file before the current one (replaced)
+            if self.loaded and self.drops:
+                log.info("played to %ds: %s", int(self.position), self.drops)
             reason = msg.get("reason")
             was_loaded = self.loaded
             self.loaded = False
@@ -284,6 +293,27 @@ class Mpv:
                     self.emit(self.state("ended"))
             elif reason == "error":
                 self.emit({"type": "error", "message": "mpv: " + str(msg.get("file_error") or "cannot play this file")})
+
+    async def _get(self, name):
+        try:
+            return await self.command(["get_property", name], timeout=3)
+        except Exception:  # noqa: BLE001 - unavailable now
+            return None
+
+    async def _log_playback(self):
+        """What plays how, in the journal: the first thing to look at when a video stutters."""
+        names = ("video-codec", "width", "height", "container-fps", "hwdec-current", "audio-codec-name",
+                 "current-vo", "display-width", "display-height")
+        v = dict(zip(names, [await self._get(n) for n in names]))
+        log.info("playing %s %sx%s %.3g fps, decoding: %s, audio %s, output %s %sx%s",
+                 v["video-codec"], v["width"], v["height"], v["container-fps"] or 0,
+                 v["hwdec-current"] or "software", v["audio-codec-name"], v["current-vo"],
+                 v["display-width"], v["display-height"])
+        self.drops = {}
+        while self.loaded and self.ready_sent:
+            await asyncio.sleep(5)
+            dec, vo = await self._get("decoder-frame-drop-count"), await self._get("frame-drop-count")
+            self.drops = {"dropped by the decoder": dec or 0, "dropped by the output": vo or 0}
 
     async def _quiet(self, cmd):
         try:

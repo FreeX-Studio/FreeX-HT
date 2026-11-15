@@ -34,6 +34,7 @@ DEFAULTS: Dict[str, str] = {
     "server": "",
     "device_name": "",
     "keyboard_layout": "",
+    "lite_ui": "",
     "cec_name": "",
     # Display and playback
     "display_mode": "",

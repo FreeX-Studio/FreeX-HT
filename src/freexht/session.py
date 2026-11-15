@@ -79,6 +79,7 @@ class Session:
             "deviceName": device.device_name(self.cfg, self.model),
             "caps": device.capabilities(self.board, self.cfg),
             "server": self.cfg.get("server", ""),
+            "lite": device.lite_ui(self.cfg, self.board),
         }
 
     def bridge_js(self) -> str:
@@ -233,6 +234,7 @@ class Session:
             vo=cfg.get("video_output", ""),
             small_memory=self.board == "rpi3",
             user_agent="FreeXHT/%s" % self.version,
+            fast=self.board.startswith("rpi"),
         )
         log.info("mpv: hwdec=%s audio-device=%s", opts["hwdec"], opts["audio-device"])
         self.mpv = Mpv(runtime, opts, conf.boot_file("mpv.conf"), self.emit, self.on_mpv_window,

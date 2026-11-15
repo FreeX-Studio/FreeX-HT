@@ -166,14 +166,22 @@ def audio_device(cfg: Dict[str, str], board_name: str, root: str = "/") -> str:
 
 
 def display_mode(cfg: Dict[str, str], board_name: str) -> str:
-    """'auto' (the TV's preferred mode) or WIDTHxHEIGHT[@RATE]. The Raspberry Pi runs the
-    interface in 1080p by default: 4K costs the Pi 4 too much for the web page on top."""
+    """'auto' (the TV's preferred mode) or WIDTHxHEIGHT[@RATE]. The Raspberry Pi runs in 1080p by
+    default (4K costs the Pi 4 too much for the web page on top), the Pi 3 in 720p: its GPU
+    cannot draw video and the transparent page on top in 1080p fast enough."""
     mode = (cfg.get("display_mode") or "").strip().lower()
     aliases = {"1080p": "1920x1080", "720p": "1280x720", "2160p": "3840x2160", "4k": "3840x2160", "uhd": "3840x2160"}
     mode = aliases.get(mode, mode)
     if mode:
         return mode
+    if board_name == "rpi3":
+        return "1280x720"
     return "1920x1080" if board_name.startswith("rpi") else "auto"
+
+
+def lite_ui(cfg: Dict[str, str], board_name: str) -> bool:
+    """The interface without transitions, animations and shadows (lite_ui); on by default on the Pi 3."""
+    return conf.flag(cfg.get("lite_ui", ""), board_name == "rpi3")
 
 
 def pick_mode(modes: List[dict], wanted: str) -> Optional[str]:

@@ -1,5 +1,13 @@
 # Changelog
 
+## FreeXHT 0.1.1
+
+- Raspberry Pi 3: the screen runs in 720p by default (`display_mode` changes it) and the interface without
+  transitions or animations (`lite_ui`); video and the page on top were too much for its GPU in 1080p
+- mpv uses its `fast` profile on every Raspberry Pi (simple scaling, no dithering)
+- The journal shows for every video what plays how (codec, size, frame rate, hardware decoding or software,
+  output) and, at the end, the frames dropped by the decoder and the output
+
 ## FreeXHT 0.1.0
 
 First version of FreeXHT, the FreeX system image for the TV:

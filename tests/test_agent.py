@@ -118,6 +118,10 @@ class DeviceTest(unittest.TestCase):
 
     def test_display_mode(self):
         self.assertEqual(device.display_mode(config.DEFAULTS, "rpi4"), "1920x1080")
+        self.assertEqual(device.display_mode(config.DEFAULTS, "rpi3"), "1280x720")
+        self.assertTrue(device.lite_ui(config.DEFAULTS, "rpi3"))
+        self.assertFalse(device.lite_ui(config.DEFAULTS, "rpi4"))
+        self.assertTrue(device.lite_ui(dict(config.DEFAULTS, lite_ui="yes"), "x86"))
         self.assertEqual(device.display_mode(config.DEFAULTS, "x86"), "auto")
         self.assertEqual(device.display_mode(dict(config.DEFAULTS, display_mode="4K"), "rpi5"), "3840x2160")
         modes = [{"width": 3840, "height": 2160, "refresh": 60000}, {"width": 1920, "height": 1080, "refresh": 50000},
@@ -248,6 +252,9 @@ class MpvTest(unittest.TestCase):
         self.assertIn("wayland-app-id=freexht-video\n", text)
         self.assertIn("demuxer-max-bytes=48MiB\n", text)
         self.assertTrue(text.rstrip().endswith("include=/boot/firmware/mpv.conf"))
+        self.assertNotIn("profile=", text)
+        fast = mpv_conf(default_options("drm", "auto", "", "", False, "t", fast=True), None)
+        self.assertTrue(fast.splitlines()[1] == "profile=fast", "the profile first, so later options win")
 
     def test_with_fake_mpv(self):
         """The page's view of a playback: ready (paused, at the start position), time, state, seek,
