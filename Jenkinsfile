@@ -17,7 +17,7 @@
 //
 // The build agent needs Debian 13 or newer with (once, as root):
 //
-//   sudo apt install python3 dpkg-dev git curl gpg mmdebstrap uidmap e2fsprogs dosfstools mtools \
+//   sudo apt install python3 dpkg-dev git curl gpg mmdebstrap uidmap e2fsprogs libarchive13t64 dosfstools mtools \
 //       fdisk xz-utils qemu-user-static binfmt-support arch-test debian-archive-keyring
 //   sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 jenkins
 //

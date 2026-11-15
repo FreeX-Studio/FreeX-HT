@@ -22,7 +22,7 @@
 # SD card or disk at the first start.
 #
 # Build host: Debian 13 (or newer) with
-#   sudo apt install mmdebstrap uidmap e2fsprogs dosfstools mtools fdisk xz-utils gpg curl \
+#   sudo apt install mmdebstrap uidmap e2fsprogs libarchive13t64 dosfstools mtools fdisk xz-utils gpg curl \
 #       qemu-user-static binfmt-support arch-test
 # and subordinate ids for the building user (/etc/subuid, /etc/subgid; `sudo usermod --add-subuids
 # 100000-165535 --add-subgids 100000-165535 jenkins`). As root it works too.
@@ -85,6 +85,14 @@ if [ "$1" = rpi ] && [ "$(dpkg --print-architecture 2>/dev/null)" != arm64 ]; th
     ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1 \
         || problems+=("arm64 binaries cannot run here (binfmt): sudo apt install qemu-user-static binfmt-support, then sudo systemctl restart systemd-binfmt")
 fi
+# Without root, mke2fs fills the root file system straight from the tarball: e2fsprogs 1.47.1 or
+# newer, which loads libarchive at run time (not a dependency of e2fsprogs).
+if [ "$(id -u)" != 0 ] && command -v mke2fs >/dev/null; then
+    mke2fs -V 2>&1 | grep -qE '1\.(4[89]|47\.[1-9])|1\.[5-9]' \
+        || problems+=("mke2fs older than 1.47.1 cannot read tarballs: build on Debian 13 or as root")
+    ldconfig -p 2>/dev/null | grep -q 'libarchive\.so\.13' \
+        || problems+=("mke2fs needs libarchive to read the root file system tarball: sudo apt install libarchive13t64")
+fi
 if [ "${#missing[@]}" -gt 0 ]; then
     problems+=("missing tools: sudo apt install $(printf '%s\n' "${missing[@]}" | sort -u | tr '\n' ' ')")
 fi
@@ -92,9 +100,6 @@ if [ "${#problems[@]}" -gt 0 ]; then
     echo "build-image: this machine cannot build images yet:" >&2
     printf '  - %s\n' "${problems[@]}" >&2
     exit 1
-fi
-if [ "$(id -u)" != 0 ] && ! mke2fs -V 2>&1 | grep -qE '1\.(4[89]|47\.[1-9])|1\.[5-9]'; then
-    log "warning: mke2fs older than 1.47.1 cannot read the root file system as a tarball; build as root or on Debian 13"
 fi
 [ -f "$DEB" ] || die "$DEB not found"
 
