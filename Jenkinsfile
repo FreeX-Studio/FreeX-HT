@@ -27,7 +27,8 @@
 // apt-cacher-ng speeds it up: set DEBIAN_MIRROR, SECURITY_MIRROR and RPI_MIRROR (the images still
 // use the official sources).
 //
-// IMAGES=false (environment or job parameter) builds only the package.
+// IMAGES=false (environment or job parameter) builds only the package. The package is published
+// before the images are built, so a failing image build does not hold back updates of the boxes.
 //
 // APT repository: like freex-media-server, APT_REPO (and APT_HOST, APT_SUITE) publish the package
 // with packaging/apt/publish.sh. For the Raspberry Pi the repository has to offer arm64 as well:
@@ -74,20 +75,6 @@ pipeline {
             }
         }
 
-        stage('Images') {
-            when {
-                expression { env.IMAGES != 'false' }
-            }
-            steps {
-                sh '''
-                    VERSION="$(cat VERSION)"
-                    DEB="$(ls dist/freexht_*_all.deb)"
-                    image/build-image.sh rpi "$VERSION" "$DEB" dist
-                    image/build-image.sh x86_64 "$VERSION" "$DEB" dist
-                '''
-            }
-        }
-
         stage('Publish') {
             when {
                 expression { env.APT_REPO?.trim() && (env.BRANCH_NAME == null || env.BRANCH_NAME == 'main') }
@@ -112,6 +99,20 @@ EOS
                 }
             }
         }
+        stage('Images') {
+            when {
+                expression { env.IMAGES != 'false' }
+            }
+            steps {
+                sh '''
+                    VERSION="$(cat VERSION)"
+                    DEB="$(ls dist/freexht_*_all.deb)"
+                    image/build-image.sh rpi "$VERSION" "$DEB" dist
+                    image/build-image.sh x86_64 "$VERSION" "$DEB" dist
+                '''
+            }
+        }
+
     }
 
     post {

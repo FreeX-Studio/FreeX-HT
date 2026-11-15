@@ -39,6 +39,8 @@
 #                         archive key (tests with another distribution, see tests/image-smoke.sh)
 
 set -euo pipefail
+# mke2fs, mkfs.vfat and sfdisk live in /usr/sbin, which a build user's PATH often lacks.
+export PATH="$PATH:/usr/sbin:/sbin"
 
 if [ "$#" -ne 4 ]; then
     echo "usage: build-image.sh <rpi|x86_64> <version> <freexht_*.deb> <output directory>" >&2
@@ -61,9 +63,37 @@ MMDEBSTRAP_MODE="${MMDEBSTRAP_MODE:-auto}"
 log() { echo "build-image: $*"; }
 die() { echo "build-image: $*" >&2; exit 1; }
 
-for tool in mmdebstrap mke2fs mkfs.vfat mcopy sfdisk xz gpg dpkg-deb; do
-    command -v "$tool" >/dev/null || die "$tool is missing (see the comment at the top of this script)"
+# --- what the build host needs (all problems at once, with the fix) ------------------------
+problems=()
+declare -A PKG_OF=([mmdebstrap]=mmdebstrap [mke2fs]=e2fsprogs [mkfs.vfat]=dosfstools [mcopy]=mtools
+                   [sfdisk]=fdisk [xz]=xz-utils [gpg]=gpg [dpkg-deb]=dpkg [curl]=curl)
+missing=()
+for tool in "${!PKG_OF[@]}"; do
+    command -v "$tool" >/dev/null || missing+=("${PKG_OF[$tool]}")
 done
+[ -f /usr/share/keyrings/debian-archive-keyring.gpg ] || [ -n "${ARCHIVE_KEYRING:-}" ] || missing+=(debian-archive-keyring)
+if [ "$(id -u)" != 0 ]; then
+    command -v newuidmap >/dev/null || missing+=(uidmap)
+    me="$(id -un)"
+    grep -q "^$me:" /etc/subuid 2>/dev/null && grep -q "^$me:" /etc/subgid 2>/dev/null \
+        || problems+=("no subordinate ids for $me: sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 $me")
+fi
+if [ "$1" = rpi ] && [ "$(dpkg --print-architecture 2>/dev/null)" != arm64 ]; then
+    command -v arch-test >/dev/null || missing+=(arch-test)
+    ls /proc/sys/fs/binfmt_misc/qemu-aarch64 >/dev/null 2>&1 \
+        || problems+=("arm64 binaries cannot run here (binfmt): sudo apt install qemu-user-static binfmt-support, then sudo systemctl restart systemd-binfmt")
+fi
+if [ "${#missing[@]}" -gt 0 ]; then
+    problems+=("missing tools: sudo apt install $(printf '%s\n' "${missing[@]}" | sort -u | tr '\n' ' ')")
+fi
+if [ "${#problems[@]}" -gt 0 ]; then
+    echo "build-image: this machine cannot build images yet:" >&2
+    printf '  - %s\n' "${problems[@]}" >&2
+    exit 1
+fi
+if [ "$(id -u)" != 0 ] && ! mke2fs -V 2>&1 | grep -qE '1\.(4[89]|47\.[1-9])|1\.[5-9]'; then
+    log "warning: mke2fs older than 1.47.1 cannot read the root file system as a tarball; build as root or on Debian 13"
+fi
 [ -f "$DEB" ] || die "$DEB not found"
 
 # Packages of every image: the session (freexht pulls sway, cog, mpv, NetworkManager, ...), the
