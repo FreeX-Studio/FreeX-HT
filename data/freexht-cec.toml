@@ -1,0 +1,37 @@
+# FreeXHT: the buttons of the TV's remote control (HDMI-CEC "User Control Pressed") as keys the
+# interface understands. Loaded by ir-keytable for the kernel's rc-cec device (/etc/rc_maps.cfg).
+[[protocols]]
+name = "freexht-cec"
+protocol = "cec"
+[protocols.scancodes]
+0x00 = "KEY_ENTER"          # Select / OK
+0x01 = "KEY_UP"
+0x02 = "KEY_DOWN"
+0x03 = "KEY_LEFT"
+0x04 = "KEY_RIGHT"
+0x09 = "KEY_M"              # Root Menu → menu
+0x0a = "KEY_M"              # Setup Menu → menu
+0x0b = "KEY_M"              # Contents Menu → menu
+0x0d = "KEY_ESC"            # Exit / Return / Back
+0x20 = "KEY_0"
+0x21 = "KEY_1"
+0x22 = "KEY_2"
+0x23 = "KEY_3"
+0x24 = "KEY_4"
+0x25 = "KEY_5"
+0x26 = "KEY_6"
+0x27 = "KEY_7"
+0x28 = "KEY_8"
+0x29 = "KEY_9"
+0x2b = "KEY_ENTER"          # Enter
+0x35 = "KEY_I"              # Display Information → info
+0x44 = "KEY_PLAYCD"         # Play
+0x45 = "KEY_STOPCD"         # Stop
+0x46 = "KEY_PAUSECD"        # Pause
+0x48 = "KEY_REWIND"         # Rewind
+0x49 = "KEY_FASTFORWARD"    # Fast forward
+0x4b = "KEY_NEXTSONG"       # Forward (skip)
+0x4c = "KEY_PREVIOUSSONG"   # Backward (skip)
+0x53 = "KEY_M"              # Electronic Program Guide → menu
+0x61 = "KEY_PLAYPAUSE"      # Pause-Play Function
+0x91 = "KEY_ESC"            # Back (some TVs)

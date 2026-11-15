@@ -1,0 +1,15 @@
+[Unit]
+Description=FreeXHT: apply freexht.conf from the boot partition
+Documentation=https://github.com/FreeX-Studio/FreeX-HT
+DefaultDependencies=no
+After=local-fs.target freexht-firstboot.service
+Before=network-pre.target NetworkManager.service ssh.service freexht.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/freexht/freexht-config
+
+[Install]
+WantedBy=multi-user.target

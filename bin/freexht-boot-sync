@@ -1,0 +1,92 @@
+#!/bin/sh
+#
+# Copyright (c) 2026 MirraNET, Niklas Linz. All rights reserved.
+#
+# This file is part of the MirraNET project and is licensed under the
+# GNU Lesser General Public License v3.0 (LGPLv3).
+#
+# You may use, distribute and modify this code under the terms
+# of the LGPLv3 license. You should have received a copy of the
+# license along with this file. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>
+# or contact: niklas.linz@mirranet.de
+#
+# freexht-boot-sync: puts the newest kernel and initramfs where the firmware boots them from.
+# Called as kernel and initramfs hook (/etc/kernel/postinst.d, /etc/initramfs/post-update.d) and
+# once by the image build. Which kind of boot partition: /etc/freexht/target ("rpi" or "efi").
+#
+#   rpi   /boot/firmware (FAT): kernel8.img + initramfs8 (Pi 3/4, rpi-v8), kernel_2712.img +
+#         initramfs_2712 (Pi 5), device trees and overlays, the firmware files.
+#   efi   /boot/efi (FAT, systemd-boot): freexht/vmlinuz + freexht/initrd.img, the kernel before
+#         as freexht/vmlinuz.old + initrd.img.old (boot menu entry "FreeXHT (previous kernel)").
+
+set -eu
+
+target=$(cat /etc/freexht/target 2>/dev/null || true)
+
+newest() {  # newest file matching a glob, by kernel version
+    ls -1 $1 2>/dev/null | sort -V | tail -n1
+}
+
+copy() {  # atomic enough for FAT: copy next to it, then rename
+    cp "$1" "$2.new" && mv -f "$2.new" "$2"
+}
+
+sync_rpi() {
+    fw=/boot/firmware
+    [ -d "$fw" ] || return 0
+    # Firmware files (Debian's raspi-firmware keeps them in /usr/lib/raspi-firmware).
+    if [ -d /usr/lib/raspi-firmware ]; then
+        for f in /usr/lib/raspi-firmware/*.elf /usr/lib/raspi-firmware/*.dat /usr/lib/raspi-firmware/*.bin; do
+            [ -f "$f" ] && copy "$f" "$fw/$(basename "$f")"
+        done
+    fi
+    for flavour in v8:kernel8.img:initramfs8 2712:kernel_2712.img:initramfs_2712; do
+        suffix=${flavour%%:*}; rest=${flavour#*:}; kimg=${rest%%:*}; iimg=${rest#*:}
+        k=$(newest "/boot/vmlinuz-*-rpi-$suffix")
+        [ -n "$k" ] || continue
+        ver=${k#/boot/vmlinuz-}
+        copy "$k" "$fw/$kimg"
+        [ -f "/boot/initrd.img-$ver" ] && copy "/boot/initrd.img-$ver" "$fw/$iimg"
+        # Device trees and overlays of that kernel.
+        for d in "/usr/lib/linux-image-$ver/broadcom" "/usr/lib/linux-image-$ver"; do
+            for dtb in "$d"/bcm27*.dtb "$d"/bcm2836*.dtb "$d"/bcm2837*.dtb "$d"/bcm2711*.dtb "$d"/bcm2712*.dtb; do
+                [ -f "$dtb" ] && copy "$dtb" "$fw/$(basename "$dtb")"
+            done
+        done
+        if [ -d "/usr/lib/linux-image-$ver/overlays" ]; then
+            mkdir -p "$fw/overlays"
+            cp -r "/usr/lib/linux-image-$ver/overlays/." "$fw/overlays/"
+        fi
+    done
+}
+
+sync_efi() {
+    esp=/boot/efi
+    [ -d "$esp/loader" ] || return 0
+    mkdir -p "$esp/freexht"
+    k=$(newest "/boot/vmlinuz-*")
+    [ -n "$k" ] || return 0
+    ver=${k#/boot/vmlinuz-}
+    # Keep the kernel that booted until now as the fallback, unless it is the same one.
+    if [ -f "$esp/freexht/version" ] && [ "$(cat "$esp/freexht/version")" != "$ver" ]; then
+        [ -f "$esp/freexht/vmlinuz" ] && cp "$esp/freexht/vmlinuz" "$esp/freexht/vmlinuz.old"
+        [ -f "$esp/freexht/initrd.img" ] && cp "$esp/freexht/initrd.img" "$esp/freexht/initrd.img.old"
+    fi
+    copy "$k" "$esp/freexht/vmlinuz"
+    [ -f "/boot/initrd.img-$ver" ] && copy "/boot/initrd.img-$ver" "$esp/freexht/initrd.img"
+    echo "$ver" > "$esp/freexht/version"
+    # systemd-boot itself.
+    sdboot=/usr/lib/systemd/boot/efi/systemd-bootx64.efi
+    if [ -f "$sdboot" ]; then
+        mkdir -p "$esp/EFI/BOOT"
+        copy "$sdboot" "$esp/EFI/BOOT/BOOTX64.EFI"
+    fi
+}
+
+case "$target" in
+    rpi) sync_rpi ;;
+    efi) sync_efi ;;
+    *) exit 0 ;;
+esac
+sync
+exit 0

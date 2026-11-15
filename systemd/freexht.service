@@ -1,0 +1,33 @@
+[Unit]
+Description=FreeXHT: the FreeX TV interface on tty1 (sway, mpv, cog)
+Documentation=https://github.com/FreeX-Studio/FreeX-HT
+After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service freexht-config.service
+After=dbus.socket systemd-logind.service
+Wants=dbus.socket systemd-logind.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/dev/tty1
+
+[Service]
+Type=simple
+User=freexht
+PAMName=freexht
+WorkingDirectory=~
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland
+# PCs without a working GPU driver: sway draws in software instead of not starting.
+Environment=WLR_RENDERER_ALLOW_SOFTWARE=1
+ExecStart=/usr/bin/sway --config /usr/lib/freexht/sway.conf
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target
+Alias=display-manager.service

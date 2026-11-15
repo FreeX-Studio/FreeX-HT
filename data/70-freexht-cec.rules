@@ -1,0 +1,2 @@
+# FreeXHT: every HDMI-CEC adapter becomes a playback device "FreeXHT" (freexht-cec@.service).
+ACTION=="add", SUBSYSTEM=="cec", KERNEL=="cec[0-9]*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="freexht-cec@%k.service"

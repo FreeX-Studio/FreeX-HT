@@ -1,0 +1,30 @@
+# FreeXHT – boot configuration of the Raspberry Pi (3, 4, 5).
+# More: https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+# 64-bit kernel (kernel8.img on the Pi 3/4, kernel_2712.img on the Pi 5) with its initramfs.
+arm_64bit=1
+auto_initramfs=1
+
+# Graphics and HDMI through the kernel (KMS); sound over HDMI comes with it.
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+disable_fw_kms_setup=1
+disable_overscan=1
+disable_splash=1
+
+# No camera or DSI display on a TV box.
+camera_auto_detect=0
+display_auto_detect=0
+
+[pi4]
+# 4K at 60 Hz on the Pi 4 (the Pi 5 can always).
+hdmi_enable_4kp60=1
+arm_boost=1
+
+[cm4]
+otg_mode=1
+
+[cm5]
+dtoverlay=dwc2,dr_mode=host
+
+[all]

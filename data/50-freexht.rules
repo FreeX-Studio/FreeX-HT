@@ -1,0 +1,19 @@
+/*
+ * FreeXHT: the interface (user freexht) may set up networks, restart and switch off the box.
+ */
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "freexht") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0) {
+        return polkit.Result.YES;
+    }
+    var power = [
+        "org.freedesktop.login1.reboot", "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.power-off", "org.freedesktop.login1.power-off-multiple-sessions",
+    ];
+    if (power.indexOf(action.id) >= 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

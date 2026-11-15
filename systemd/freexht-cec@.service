@@ -1,0 +1,10 @@
+[Unit]
+Description=FreeXHT: HDMI-CEC playback device on %I
+Documentation=https://github.com/FreeX-Studio/FreeX-HT
+After=systemd-udevd.service
+BindsTo=dev-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/freexht/freexht-cec /dev/%I

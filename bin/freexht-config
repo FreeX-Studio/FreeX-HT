@@ -1,0 +1,6 @@
+#!/usr/bin/python3 -I
+# FreeXHT: start of freexht.bootconfig (installed under /usr/lib/freexht).
+import sys
+sys.path.insert(0, "/usr/lib/freexht")
+from freexht.bootconfig import main
+sys.exit(main())

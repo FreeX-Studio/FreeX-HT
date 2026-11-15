@@ -1,0 +1,6 @@
+# FreeXHT: the session of the interface on tty1 (freexht.service), a local seat session for sway.
+auth     required pam_unix.so nullok
+account  required pam_unix.so
+session  required pam_unix.so
+session  optional pam_loginuid.so
+session  required pam_systemd.so

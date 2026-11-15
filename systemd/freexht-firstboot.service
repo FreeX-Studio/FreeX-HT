@@ -1,0 +1,15 @@
+[Unit]
+Description=FreeXHT: first start (grow the root file system, SSH host keys)
+Documentation=https://github.com/FreeX-Studio/FreeX-HT
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target ssh.service freexht-config.service
+ConditionPathExists=!/var/lib/freexht/firstboot-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/freexht/freexht-firstboot
+
+[Install]
+WantedBy=sysinit.target

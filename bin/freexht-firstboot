@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+# Copyright (c) 2026 MirraNET, Niklas Linz. All rights reserved.
+#
+# This file is part of the MirraNET project and is licensed under the
+# GNU Lesser General Public License v3.0 (LGPLv3).
+#
+# You may use, distribute and modify this code under the terms
+# of the LGPLv3 license. You should have received a copy of the
+# license along with this file. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>
+# or contact: niklas.linz@mirranet.de
+#
+# freexht-firstboot: the first start of a freshly flashed FreeXHT image.
+#
+#  - grows the root partition and its file system to the whole SD card / disk,
+#  - creates the SSH host keys (the image has none, every box gets its own).
+#
+# Runs once (freexht-firstboot.service); /var/lib/freexht/firstboot-done marks it done.
+
+set -u
+
+log() { echo "freexht-firstboot: $*"; }
+
+root_dev=$(findmnt -n -o SOURCE /)
+root_name=$(basename "$root_dev")
+disk_name=$(lsblk -n -o PKNAME "$root_dev" 2>/dev/null | head -n1)
+part_no=$(cat "/sys/class/block/$root_name/partition" 2>/dev/null || true)
+
+if [ -n "$disk_name" ] && [ -n "$part_no" ] && command -v growpart >/dev/null; then
+    # growpart exits with 1 when there is nothing to grow ("NOCHANGE").
+    if growpart "/dev/$disk_name" "$part_no"; then
+        partx -u "/dev/$disk_name" 2>/dev/null || true
+        resize2fs "$root_dev" && log "root file system grown to the whole disk"
+    fi
+else
+    log "cannot find the root partition of $root_dev, not grown"
+fi
+
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1 && command -v ssh-keygen >/dev/null; then
+    ssh-keygen -A && log "SSH host keys created"
+fi
+
+mkdir -p /var/lib/freexht
+touch /var/lib/freexht/firstboot-done
+exit 0

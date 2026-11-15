@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stand-in for nmcli in the e2e test: two Wi-Fi networks, "Home" with the password "pw12".
+case "$*" in
+    *"device wifi list"*)
+        printf ' :Home:72:WPA2\n :Cafe\\: Gast:40:\n*:Nachbar:55:WPA2\n' ;;
+    *"device wifi connect Home password pw12"*)
+        echo "Device 'wlan0' successfully activated" ;;
+    *"device wifi connect"*)
+        echo "Error: Connection activation failed: (7) Secrets were required, but not provided." >&2; exit 4 ;;
+    *"DEVICE,TYPE,STATE,CONNECTION device"*)
+        printf 'eth0:ethernet:unavailable:\nwlan0:wifi:connected:Nachbar\nlo:loopback:connected (externally):lo\n' ;;
+    *) exit 0 ;;
+esac
