@@ -132,8 +132,13 @@ else
     WORK="$(mktemp -d "${TMPDIR:-/tmp}/freexht-image.XXXXXX")"
     trap 'rm -rf "$WORK"' EXIT
 fi
-rm -rf "$WORK/keys" "$WORK/bootfs" "$WORK/localrepo" "$WORK/rootfs.tar" "$WORK/root.img" "$WORK/boot.img" "$WORK/disk.img"
-mkdir -p "$WORK/keys" "$WORK/localrepo" "$OUT"
+rm -rf "$WORK/keys" "$WORK/bootfs" "$WORK/localrepo" "$WORK/image" "$WORK/rootfs.tar" "$WORK/root.img" "$WORK/boot.img" "$WORK/disk.img"
+mkdir -p "$WORK/keys" "$WORK/localrepo" "$WORK/bootfs" "$OUT"
+# Without root, apt and the hooks run as a subordinate user id in mmdebstrap's namespace, not as
+# the building user: everything they read (keys, the package, the image files) must be readable
+# for others. The build directory gets no secrets.
+chmod 755 "$WORK"
+cp -r "$HERE" "$WORK/image"
 NAME="FreeXHT-$VERSION-$TARGET_NAME"
 
 # --- signing keys ----------------------------------------------------------------------------
@@ -172,6 +177,9 @@ cp "$DEB" "$WORK/localrepo/freexht.deb"
     echo
 } > "$WORK/localrepo/Packages"
 
+chmod -R a+rX "$WORK/keys" "$WORK/localrepo" "$WORK/image"
+[ -z "$MIRRANET_KEY_FILE" ] || chmod a+r "$MIRRANET_KEY_FILE"
+
 # --- partition ids ---------------------------------------------------------------------------
 if [ "$TARGET" = rpi ]; then
     DISK_ID="$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
@@ -191,7 +199,7 @@ SOURCES=("deb $DEBIAN_MIRROR $SUITE $COMPONENTS"
 SOURCES+=("deb [trusted=yes] copy://$WORK/localrepo ./")
 
 export FREEXHT_TARGET="$TARGET" FREEXHT_BOOT_DIR="$BOOT_DIR" FREEXHT_VERSION="$VERSION" ROOT_PARTUUID BOOT_PARTUUID \
-    IMAGE_DIR="$HERE" BOOTFS_OUT="$WORK/bootfs" SUITE MIRRANET_APT MIRRANET_KEY="$MIRRANET_KEY_FILE"
+    IMAGE_DIR="$WORK/image" SUITE MIRRANET_APT MIRRANET_KEY="$MIRRANET_KEY_FILE"
 
 log "$NAME: root file system ($ARCH, $SUITE)"
 mmdebstrap \
@@ -207,7 +215,9 @@ mmdebstrap \
     --setup-hook='mkdir -p "$1/etc/freexht" "$1'"$BOOT_DIR"'" && echo '"$TARGET"' > "$1/etc/freexht/target"' \
     --setup-hook='mkdir -p "$1/etc/initramfs-tools/conf.d" && echo MODULES=most > "$1/etc/initramfs-tools/conf.d/freexht.conf"' \
     --setup-hook='if [ -f "'"$WORK"'/keys/raspberrypi.gpg" ]; then mkdir -p "$1/usr/share/keyrings" && cp "'"$WORK"'/keys/raspberrypi.gpg" "$1/usr/share/keyrings/raspberrypi-archive-keyring.gpg"; fi' \
-    --customize-hook="\"$HERE/customize.sh\" \"\$1\"" \
+    --customize-hook="\"$WORK/image/customize.sh\" \"\$1\"" \
+    --customize-hook="sync-out $BOOT_DIR $WORK/bootfs" \
+    --customize-hook="find \"\$1$BOOT_DIR\" -mindepth 1 -delete" \
     "$SUITE" "$WORK/rootfs.tar" "${SOURCES[@]}"
 
 # --- file system images ----------------------------------------------------------------------

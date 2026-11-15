@@ -12,7 +12,7 @@
 #
 # The last step of the image build, as mmdebstrap customize hook: everything the packages do not
 # do themselves. Called by build-image.sh with the root directory and the settings in the
-# environment (FREEXHT_TARGET, FREEXHT_BOOT_DIR, ROOT_PARTUUID, BOOT_PARTUUID, IMAGE_DIR, BOOTFS_OUT,
+# environment (FREEXHT_TARGET, FREEXHT_BOOT_DIR, ROOT_PARTUUID, BOOT_PARTUUID, IMAGE_DIR,
 # SUITE, MIRRANET_APT, MIRRANET_KEY).
 
 set -eu
@@ -138,9 +138,6 @@ Unattended-Upgrade::Origins-Pattern {
 Unattended-Upgrade::Automatic-Reboot "false";
 APT
 
-# --- version, then the boot partition goes into its own FAT image ----------------------------------
 echo "$FREEXHT_VERSION" > "$R/etc/freexht/image-version"
-mkdir -p "$BOOTFS_OUT"
-cp -r "$R$FREEXHT_BOOT_DIR/." "$BOOTFS_OUT/"
-find "$R$FREEXHT_BOOT_DIR" -mindepth 1 -delete
+# The boot partition is taken out of the tree by build-image.sh (sync-out) for its own FAT image.
 echo "customize: done"
