@@ -88,9 +88,12 @@ fi
 # Without root, mke2fs fills the root file system straight from the tarball: e2fsprogs 1.47.1 or
 # newer, which loads libarchive at run time (not a dependency of e2fsprogs).
 if [ "$(id -u)" != 0 ] && command -v mke2fs >/dev/null; then
-    mke2fs -V 2>&1 | grep -qE '1\.(4[89]|47\.[1-9])|1\.[5-9]' \
-        || problems+=("mke2fs older than 1.47.1 cannot read tarballs: build on Debian 13 or as root")
-    ldconfig -p 2>/dev/null | grep -q 'libarchive\.so\.13' \
+    # Output into a variable first: "cmd | grep -q" fails under pipefail when grep stops reading early.
+    e2fs_version="$(mke2fs -V 2>&1 || true)"
+    [[ "$e2fs_version" =~ mke2fs\ 1\.(4[89]|47\.[1-9]|[5-9][0-9]) ]] \
+        || problems+=("mke2fs older than 1.47.1 cannot read tarballs: build on Debian 13 or as root (${e2fs_version%%$'\n'*})")
+    libs="$(ldconfig -p 2>/dev/null || true)"
+    [[ "$libs" == *libarchive.so.13* ]] \
         || problems+=("mke2fs needs libarchive to read the root file system tarball: sudo apt install libarchive13t64")
 fi
 if [ "${#missing[@]}" -gt 0 ]; then
