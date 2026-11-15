@@ -104,12 +104,16 @@ Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 SOURCES
 if [ "$FREEXHT_TARGET" = rpi ]; then
+    # raspberrypi-archive-keyring 2025.1 ships .pgp, older versions .gpg.
+    RPI_KEYRING=/usr/share/keyrings/raspberrypi-archive-keyring.pgp
+    [ -f "$R$RPI_KEYRING" ] || RPI_KEYRING=/usr/share/keyrings/raspberrypi-archive-keyring.gpg
+    [ -f "$R$RPI_KEYRING" ] || { echo "customize: raspberrypi-archive-keyring has no keyring" >&2; exit 1; }
     cat > "$R/etc/apt/sources.list.d/raspi.sources" <<SOURCES
 Types: deb
 URIs: http://archive.raspberrypi.com/debian
 Suites: $SUITE
 Components: main
-Signed-By: /usr/share/keyrings/raspberrypi-archive-keyring.gpg
+Signed-By: $RPI_KEYRING
 SOURCES
 fi
 if [ -n "${MIRRANET_APT:-}" ] && [ -s "${MIRRANET_KEY:-}" ]; then

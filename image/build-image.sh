@@ -28,6 +28,8 @@
 # 100000-165535 --add-subgids 100000-165535 jenkins`). As root it works too.
 #
 # Environment (all optional):
+#   RPI_KEY               keyring file for the Raspberry Pi archive (default: from the package
+#                         raspberrypi-archive-keyring, loaded from RPI_KEY_BASE, https://archive.raspberrypi.com/debian)
 #   SUITE (trixie), DEBIAN_MIRROR, SECURITY_MIRROR, RPI_MIRROR   where packages come from (a local
 #                         mirror or apt-cacher-ng speeds up builds; the image itself uses the official ones)
 #   MIRRANET_APT          https://apt.mirranet.de; the box updates FreeXHT from there ("" = not added)
@@ -142,14 +144,49 @@ cp -r "$HERE" "$WORK/image"
 NAME="FreeXHT-$VERSION-$TARGET_NAME"
 
 # --- signing keys ----------------------------------------------------------------------------
+RPI_KEY_BASE="${RPI_KEY_BASE:-https://archive.raspberrypi.com/debian}"
+
+fetch_rpi_keyring() {
+    local idx="$WORK/rpi-Packages" filename
+    for ext in .xz .gz ""; do
+        if curl -fsSL "$RPI_KEY_BASE/dists/$SUITE/main/binary-arm64/Packages$ext" -o "$idx$ext"; then
+            case "$ext" in .xz) xz -dc "$idx$ext" > "$idx" ;; .gz) gzip -dc "$idx$ext" > "$idx" ;; esac
+            break
+        fi
+    done
+    [ -s "$idx" ] || return 1
+    # The newest raspberrypi-archive-keyring in the index.
+    filename="$(awk '/^Package: /{p=($2=="raspberrypi-archive-keyring")} p&&/^Version: /{v=$2} p&&/^Filename: /{print v" "$2}' "$idx" \
+        | sort -V | tail -n1 | cut -d' ' -f2)"
+    [ -n "$filename" ] || return 1
+    log "Raspberry Pi archive keys from $(basename "$filename")"
+    curl -fsSL "$RPI_KEY_BASE/$filename" -o "$WORK/rpi-keyring.deb" || return 1
+    rm -rf "$WORK/rpi-keyring"
+    dpkg-deb -x "$WORK/rpi-keyring.deb" "$WORK/rpi-keyring"
+    # Binary keyrings (.pgp/.gpg) as they are; armored ones (.asc) dearmored.
+    local n=0 k
+    for k in "$WORK"/rpi-keyring/usr/share/keyrings/*.pgp "$WORK"/rpi-keyring/usr/share/keyrings/*.gpg \
+             "$WORK"/rpi-keyring/etc/apt/trusted.gpg.d/*.gpg "$WORK"/rpi-keyring/etc/apt/keyrings/*; do
+        [ -f "$k" ] || continue
+        case "$k" in *removed*) continue ;; esac
+        n=$((n + 1))
+        if grep -q "BEGIN PGP" "$k"; then gpg --dearmor < "$k" > "$WORK/keys/raspberrypi-$n.gpg"
+        else cp "$k" "$WORK/keys/raspberrypi-$n.gpg"; fi
+    done
+    [ "$n" -gt 0 ]
+}
+
 cp "${ARCHIVE_KEYRING:-/usr/share/keyrings/debian-archive-keyring.gpg}" "$WORK/keys/" 2>/dev/null \
     || die "debian-archive-keyring is missing (sudo apt install debian-archive-keyring)"
 if [ "$TARGET" = rpi ]; then
     if [ -n "${RPI_KEY:-}" ]; then
-        gpg --dearmor < "$RPI_KEY" > "$WORK/keys/raspberrypi.gpg" 2>/dev/null || cp "$RPI_KEY" "$WORK/keys/raspberrypi.gpg"
+        if grep -q "BEGIN PGP" "$RPI_KEY"; then gpg --dearmor < "$RPI_KEY" > "$WORK/keys/raspberrypi.gpg"
+        else cp "$RPI_KEY" "$WORK/keys/raspberrypi.gpg"; fi
     else
-        curl -fsSL "$RPI_MIRROR/raspberrypi.gpg.key" | gpg --dearmor > "$WORK/keys/raspberrypi.gpg" \
-            || die "cannot load the key of the Raspberry Pi archive (set RPI_KEY to a file)"
+        # The key at $RPI_KEY_BASE/raspberrypi.gpg.key is bound with SHA1, which apt (sqv) rejects
+        # since 2026-02-01. The current keys come with the package raspberrypi-archive-keyring
+        # (2025.1 and newer): take them from that package, loaded over HTTPS.
+        fetch_rpi_keyring || die "cannot load the keys of the Raspberry Pi archive (set RPI_KEY to a keyring file)"
     fi
 fi
 MIRRANET_KEY_FILE=""
@@ -176,6 +213,8 @@ cp "$DEB" "$WORK/localrepo/freexht.deb"
     echo "SHA256: $(sha256sum "$WORK/localrepo/freexht.deb" | cut -d' ' -f1)"
     echo
 } > "$WORK/localrepo/Packages"
+gzip -9kf "$WORK/localrepo/Packages"
+xz -kf "$WORK/localrepo/Packages"
 
 chmod -R a+rX "$WORK/keys" "$WORK/localrepo" "$WORK/image"
 [ -z "$MIRRANET_KEY_FILE" ] || chmod a+r "$MIRRANET_KEY_FILE"
@@ -214,7 +253,6 @@ mmdebstrap \
     --include="$(IFS=,; echo "${PKGS[*]}")" \
     --setup-hook='mkdir -p "$1/etc/freexht" "$1'"$BOOT_DIR"'" && echo '"$TARGET"' > "$1/etc/freexht/target"' \
     --setup-hook='mkdir -p "$1/etc/initramfs-tools/conf.d" && echo MODULES=most > "$1/etc/initramfs-tools/conf.d/freexht.conf"' \
-    --setup-hook='if [ -f "'"$WORK"'/keys/raspberrypi.gpg" ]; then mkdir -p "$1/usr/share/keyrings" && cp "'"$WORK"'/keys/raspberrypi.gpg" "$1/usr/share/keyrings/raspberrypi-archive-keyring.gpg"; fi' \
     --customize-hook="\"$WORK/image/customize.sh\" \"\$1\"" \
     --customize-hook="sync-out $BOOT_DIR $WORK/bootfs" \
     --customize-hook="find \"\$1$BOOT_DIR\" -mindepth 1 -delete" \
