@@ -27,12 +27,10 @@
 // apt-cacher-ng speeds it up: set DEBIAN_MIRROR, SECURITY_MIRROR and RPI_MIRROR (the images still
 // use the official sources).
 //
-// IMAGES=false (environment or job parameter) builds only the package. The package is published
-// before the images are built, so a failing image build does not hold back updates of the boxes.
+// IMAGES=false (environment or job parameter) builds only the package.
 //
-// APT repository: like freex-media-server, APT_REPO (and APT_HOST, APT_SUITE) publish the package
-// with packaging/apt/publish.sh. For the Raspberry Pi the repository has to offer arm64 as well:
-// "Architectures: amd64 arm64" in conf/distributions, then `reprepro -b <repo> export`.
+// Releases, the GitHub release and the APT repository (apt.mirranet.de) are made by GitHub
+// Actions (.github/workflows); Jenkins builds and archives the package and the images.
 
 pipeline {
     agent any
@@ -75,30 +73,6 @@ pipeline {
             }
         }
 
-        stage('Publish') {
-            when {
-                expression { env.APT_REPO?.trim() && (env.BRANCH_NAME == null || env.BRANCH_NAME == 'main') }
-            }
-            steps {
-                script {
-                    if (env.APT_HOST?.trim()) {
-                        sh '''
-                            set -eu
-                            tmp=$(ssh -o BatchMode=yes "$APT_HOST" mktemp -d)
-                            scp -o BatchMode=yes -q packaging/apt/publish.sh dist/*.deb "$APT_HOST:$tmp/"
-                            ssh -o BatchMode=yes "$APT_HOST" bash -s -- "$tmp" "$APT_REPO" "${APT_SUITE:-stable}" <<'EOS'
-rc=0
-bash "$1/publish.sh" "$2" "$3" "$1"/*.deb || rc=$?
-rm -rf "$1"
-exit $rc
-EOS
-                        '''
-                    } else {
-                        sh 'packaging/apt/publish.sh "$APT_REPO" "${APT_SUITE:-stable}" dist/*.deb'
-                    }
-                }
-            }
-        }
         stage('Images') {
             when {
                 expression { env.IMAGES != 'false' }

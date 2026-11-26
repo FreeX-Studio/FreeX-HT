@@ -115,17 +115,23 @@ on-screen keyboard), **Restart** and **Switch off**.
 ## Updates
 
 The box installs Debian security updates and new versions of the package `freexht` (interface and agent) by
-itself (unattended-upgrades, no automatic reboot). The package comes from `apt.mirranet.de` (suite `stable`).
-For the Raspberry Pi the repository must list `arm64` in `conf/distributions` (`Architectures: amd64 arm64`, then
-`reprepro -b <repo> export`), otherwise the Pi images see no FreeXHT updates.
+itself (unattended-upgrades, no automatic reboot). The package comes from `apt.mirranet.de` (suite `stable`, which
+offers `amd64` and `arm64`, so the Raspberry Pi gets it too). Only releases go there, not every build.
 
 A new image is only needed for a new Debian release or kernel changes the package cannot bring.
 
 ## Building
 
-Jenkins (`Jenkinsfile`): tests, the package, both images, and publishing the package to the APT repository like
-freex-media-server (`APT_REPO`, `APT_HOST`, `APT_SUITE`). `IMAGES=false` builds only the package. The build agent
-needs Debian 13; the packages to install are listed at the top of the `Jenkinsfile`.
+Jenkins (`Jenkinsfile`): tests, the package and both images. `IMAGES=false` builds only the package. The build
+agent needs Debian 13; the packages to install are listed at the top of the `Jenkinsfile`.
+
+GitHub Actions (`.github/workflows/build.yml`) runs the tests and builds the package on every push to `main` and
+every pull request. A release is made by hand: *Actions → Release → Run workflow*, with the version (`X.Y.Z`; empty:
+the current version if it has no tag yet, otherwise the next patch version). Write the section `## FreeXHT X.Y.Z` in
+`CHANGELOG.md` first; it becomes the release notes. The workflow sets `VERSION`, tags it (`vX.Y.Z`) and builds the
+tag: the package goes into the GitHub release and, with the job `apt`, into the APT repository, from which the
+boxes update. The job needs the organization secrets `APT_HOST`, `APT_PORT`, `APT_REPO`, `APT_SSH_KEY` and
+`APT_KNOWN_HOSTS`; without them it is skipped.
 
 By hand:
 
@@ -147,7 +153,7 @@ sizes).
 | `src/freexht/` | the agent: `session.py` (the session), `mpv.py` (mpv over JSON IPC), `web.py` (HTTP + WebSocket), `device.py` (boards, codecs, sound, screen), `system.py` (network, power), `bootconfig.py` (freexht-config), `cec.py` (freexht-cec), `config.py` (freexht.conf) |
 | `data/` | `bridge.js`, sway and cog configuration, polkit rule, udev rule, PAM, CEC keymap, `freexht.conf` |
 | `bin/`, `systemd/` | the programs in `/usr/lib/freexht` and their units |
-| `packaging/` | `build-deb.sh`, `apt/publish.sh` |
+| `packaging/` | `build-deb.sh`, `apt/publish.sh` (run on the APT repository server by the `apt` job) |
 | `image/` | `build-image.sh`, `customize.sh`, boot files for the Pi (`config.txt`, `cmdline.txt`) and systemd-boot |
 | `tests/` | unit tests, `e2e_ui.py`, `image-smoke.sh`, stand-ins for mpv and nmcli |
 

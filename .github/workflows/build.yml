@@ -1,0 +1,118 @@
+# Copyright (c) 2026 MirraNET, Niklas Linz. Licensed under the GNU LGPLv3.
+#
+# GitHub build of FreeXHT, next to the Jenkins build (Jenkinsfile) and with the same scripts:
+# the tests and the package freexht (Architecture: all). The system images are built by Jenkins
+# only (they need a Debian 13 agent with mmdebstrap). A tag v* (made by the Release workflow)
+# publishes the package as a GitHub release and in the MirraNET APT repository, from which the
+# boxes update themselves.
+#
+# Secrets (organization): APT_HOST, APT_PORT, APT_REPO, APT_SSH_KEY and APT_KNOWN_HOSTS for the
+# apt job (skipped without them).
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: FreeX TV interface (FreeX-TV-Apps)
+        run: |
+          git clone -q --depth 1 https://github.com/FreeX-Studio/FreeX-TV-Apps.git build/tv-apps
+          echo "FreeX TV interface: $(git -C build/tv-apps log -1 --format='%h %s')"
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Package
+        run: |
+          VERSION="$(cat VERSION)"
+          # A release has the plain version; other builds one of their own, as in Jenkins.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            DEB_VERSION="$VERSION"
+          else
+            DEB_VERSION="$VERSION+$(date -u +%Y%m%d%H%M).git${GITHUB_SHA::7}"
+          fi
+          packaging/build-deb.sh "$DEB_VERSION" build/tv-apps/web dist
+          ls -l dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: package
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          pattern: package
+          merge-multiple: true
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -l dist
+          # The release notes: this version's section of the changelog.
+          awk -v v="## FreeXHT ${TAG#v}" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
+          printf '\nThe boxes get the package from the APT repository apt.mirranet.de on their own. The system images are built by Jenkins.\n' >> notes.md
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "FreeXHT ${TAG#v}" \
+              --notes-file notes.md --verify-tag
+
+  apt:
+    # Publish the release .deb to the MirraNET APT repository (apt.mirranet.de).
+    # reprepro and the signing key live on the server; skipped when the deploy
+    # secrets are not configured.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          pattern: package
+          merge-multiple: true
+      - name: Publish to APT repository
+        env:
+          APT_HOST: ${{ secrets.APT_HOST }}
+          APT_SSH_KEY: ${{ secrets.APT_SSH_KEY }}
+          APT_KNOWN_HOSTS: ${{ secrets.APT_KNOWN_HOSTS }}
+          APT_REPO: ${{ secrets.APT_REPO }}
+          APT_PORT: ${{ secrets.APT_PORT }}
+          APT_SUITE: stable
+        run: |
+          if [ -z "${APT_HOST:-}" ]; then
+            echo "::notice::APT deploy secrets not set; skipping APT publish."
+            exit 0
+          fi
+          mkdir -p debs
+          find dist -name '*.deb' -exec cp {} debs/ \;
+          if ! ls debs/*.deb >/dev/null 2>&1; then echo "::error::no .deb found in artifacts"; exit 1; fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$APT_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$APT_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          opt="-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o Port=${APT_PORT:-22} -i $HOME/.ssh/id_deploy"
+          tmp=$(ssh $opt "$APT_HOST" mktemp -d)
+          scp $opt -q packaging/apt/publish.sh debs/*.deb "$APT_HOST:$tmp/"
+          ssh $opt "$APT_HOST" bash -s -- "$tmp" "$APT_REPO" "$APT_SUITE" <<'EOF'
+          rc=0
+          bash "$1/publish.sh" "$2" "$3" "$1"/*.deb || rc=$?
+          rm -rf "$1"
+          exit $rc
+          EOF
