@@ -4,6 +4,7 @@
 
 - The system images are built by GitHub Actions too (Raspberry Pi on an arm64 runner, x86_64), for every
   release and by hand (*Actions → Build → Run workflow*, *images*); a release carries the package and both images
+- The Jenkins build (`Jenkinsfile`) is gone; GitHub Actions builds everything
 
 ## FreeXHT 0.1.1
 

@@ -122,9 +122,6 @@ A new image is only needed for a new Debian release or kernel changes the packag
 
 ## Building
 
-Jenkins (`Jenkinsfile`): tests, the package and both images. `IMAGES=false` builds only the package. The build
-agent needs Debian 13; the packages to install are listed at the top of the `Jenkinsfile`.
-
 GitHub Actions (`.github/workflows/build.yml`) runs the tests and builds the package on every push to `main` and
 every pull request. The images are built for every release and when the build is started by hand with *images*
 (*Actions → Build → Run workflow*): the Raspberry Pi image on an arm64 runner, the PC image on an x86_64 runner,

@@ -1,12 +1,11 @@
 # Copyright (c) 2026 MirraNET, Niklas Linz. Licensed under the GNU LGPLv3.
 #
-# GitHub build of FreeXHT, next to the Jenkins build (Jenkinsfile) and with the same scripts:
-# the tests and the package freexht (Architecture: all) on every push, and the system images for
-# the Raspberry Pi (arm64, on an arm64 runner) and x86_64 PCs for releases or when started by hand
-# (Actions > Build > Run workflow, "images"). The images are built in a Debian 13 container, as on
-# the Jenkins agent. A tag v* (made by the Release workflow) publishes the package and the images
-# as a GitHub release and the package in the MirraNET APT repository, from which the boxes update
-# themselves.
+# The build of FreeXHT: the tests and the package freexht (Architecture: all) on every push, and
+# the system images for the Raspberry Pi (arm64, on an arm64 runner) and x86_64 PCs for releases
+# or when started by hand (Actions > Build > Run workflow, "images"). The images are built in a
+# Debian 13 container. A tag v* (made by the Release workflow) publishes the package and the
+# images as a GitHub release and the package in the MirraNET APT repository, from which the boxes
+# update themselves.
 #
 # Secrets (organization): APT_HOST, APT_PORT, APT_REPO, APT_SSH_KEY and APT_KNOWN_HOSTS for the
 # apt job (skipped without them).
@@ -44,7 +43,7 @@ jobs:
         id: package
         run: |
           VERSION="$(cat VERSION)"
-          # A release has the plain version; other builds one of their own, as in Jenkins.
+          # A release has the plain version; other builds one of their own (newer than the one before).
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             DEB_VERSION="$VERSION"
           else
@@ -86,7 +85,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
           df -h "$GITHUB_WORKSPACE"
       - name: System image
-        # Debian 13 as on the Jenkins agent (mke2fs reading tarballs, apt with sqv, the current
+        # Debian 13 (mke2fs reading tarballs, apt with sqv, the current
         # archive keys). Privileged and as root: mmdebstrap runs in root mode, no user namespace.
         env:
           TARGET: ${{ matrix.target }}

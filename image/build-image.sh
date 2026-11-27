@@ -25,7 +25,7 @@
 #   sudo apt install mmdebstrap uidmap e2fsprogs libarchive13t64 dosfstools mtools fdisk xz-utils gpg curl \
 #       qemu-user-static binfmt-support arch-test
 # and subordinate ids for the building user (/etc/subuid, /etc/subgid; `sudo usermod --add-subuids
-# 100000-165535 --add-subgids 100000-165535 jenkins`). As root it works too.
+# 100000-165535 --add-subgids 100000-165535 $USER`). As root it works too.
 #
 # Environment (all optional):
 #   RPI_KEY               keyring file for the Raspberry Pi archive (default: from the package
