@@ -1,10 +1,12 @@
 # Copyright (c) 2026 MirraNET, Niklas Linz. Licensed under the GNU LGPLv3.
 #
 # GitHub build of FreeXHT, next to the Jenkins build (Jenkinsfile) and with the same scripts:
-# the tests and the package freexht (Architecture: all). The system images are built by Jenkins
-# only (they need a Debian 13 agent with mmdebstrap). A tag v* (made by the Release workflow)
-# publishes the package as a GitHub release and in the MirraNET APT repository, from which the
-# boxes update themselves.
+# the tests and the package freexht (Architecture: all) on every push, and the system images for
+# the Raspberry Pi (arm64, on an arm64 runner) and x86_64 PCs for releases or when started by hand
+# (Actions > Build > Run workflow, "images"). The images are built in a Debian 13 container, as on
+# the Jenkins agent. A tag v* (made by the Release workflow) publishes the package and the images
+# as a GitHub release and the package in the MirraNET APT repository, from which the boxes update
+# themselves.
 #
 # Secrets (organization): APT_HOST, APT_PORT, APT_REPO, APT_SSH_KEY and APT_KNOWN_HOSTS for the
 # apt job (skipped without them).
@@ -16,6 +18,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      images:
+        description: "Also build the system images (Raspberry Pi and x86_64, about 20 minutes)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,6 +30,8 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.package.outputs.version }}
     steps:
       - uses: actions/checkout@v5
       - name: FreeX TV interface (FreeX-TV-Apps)
@@ -32,6 +41,7 @@ jobs:
       - name: Tests
         run: python3 -m unittest discover -s tests -v
       - name: Package
+        id: package
         run: |
           VERSION="$(cat VERSION)"
           # A release has the plain version; other builds one of their own, as in Jenkins.
@@ -41,6 +51,7 @@ jobs:
             DEB_VERSION="$VERSION+$(date -u +%Y%m%d%H%M).git${GITHUB_SHA::7}"
           fi
           packaging/build-deb.sh "$DEB_VERSION" build/tv-apps/web dist
+          echo "version=$DEB_VERSION" >> "$GITHUB_OUTPUT"
           ls -l dist
       - uses: actions/upload-artifact@v6
         with:
@@ -48,9 +59,60 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
 
+  images:
+    # Releases (tags) and builds started by hand with "images".
+    if: github.ref_type == 'tag' || inputs.images
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: rpi
+            runner: ubuntu-24.04-arm   # arm64 natively, no qemu
+          - target: x86_64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          pattern: package
+          merge-multiple: true
+      - name: Free disk space
+        # An image needs about 4 GB while it is built; the runners come with toolchains we don't use.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          df -h "$GITHUB_WORKSPACE"
+      - name: System image
+        # Debian 13 as on the Jenkins agent (mke2fs reading tarballs, apt with sqv, the current
+        # archive keys). Privileged and as root: mmdebstrap runs in root mode, no user namespace.
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          mkdir -p images build
+          docker run --rm --privileged -v "$GITHUB_WORKSPACE:/src" -w /src \
+              -e TARGET -e VERSION -e WORK_DIR=/src/build/work debian:trixie bash -euc '
+                  apt-get update -qq
+                  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+                      mmdebstrap e2fsprogs libarchive13t64 dosfstools mtools fdisk xz-utils gpg curl \
+                      ca-certificates dpkg-dev debian-archive-keyring >/dev/null
+                  image/build-image.sh "$TARGET" "$VERSION" dist/freexht_*.deb images
+                  rm -rf build/work
+                  chown -R '"$(id -u):$(id -g)"' images'
+          ls -l images
+      - uses: actions/upload-artifact@v6
+        with:
+          name: image-${{ matrix.target }}
+          path: images/*
+          compression-level: 0   # already xz
+          if-no-files-found: error
+
   release:
     if: github.ref_type == 'tag'
-    needs: package
+    needs: [package, images]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -59,7 +121,6 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           path: dist
-          pattern: package
           merge-multiple: true
       - name: GitHub release
         env:
@@ -69,7 +130,7 @@ jobs:
           ls -l dist
           # The release notes: this version's section of the changelog.
           awk -v v="## FreeXHT ${TAG#v}" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
-          printf '\nThe boxes get the package from the APT repository apt.mirranet.de on their own. The system images are built by Jenkins.\n' >> notes.md
+          printf '\nWrite FreeXHT-*-rpi.img.xz (Raspberry Pi 3/4/5) or FreeXHT-*-x86_64.img.xz (UEFI PCs) to an SD card or disk. Installed boxes get the package from the APT repository apt.mirranet.de on their own.\n' >> notes.md
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "FreeXHT ${TAG#v}" \
               --notes-file notes.md --verify-tag
 

@@ -126,10 +126,13 @@ Jenkins (`Jenkinsfile`): tests, the package and both images. `IMAGES=false` buil
 agent needs Debian 13; the packages to install are listed at the top of the `Jenkinsfile`.
 
 GitHub Actions (`.github/workflows/build.yml`) runs the tests and builds the package on every push to `main` and
-every pull request. A release is made by hand: *Actions → Release → Run workflow*, with the version (`X.Y.Z`; empty:
+every pull request. The images are built for every release and when the build is started by hand with *images*
+(*Actions → Build → Run workflow*): the Raspberry Pi image on an arm64 runner, the PC image on an x86_64 runner,
+both in a privileged Debian 13 container (mmdebstrap as root). They are kept as the artifacts `image-rpi` and
+`image-x86_64`. A release is made by hand: *Actions → Release → Run workflow*, with the version (`X.Y.Z`; empty:
 the current version if it has no tag yet, otherwise the next patch version). Write the section `## FreeXHT X.Y.Z` in
 `CHANGELOG.md` first; it becomes the release notes. The workflow sets `VERSION`, tags it (`vX.Y.Z`) and builds the
-tag: the package goes into the GitHub release and, with the job `apt`, into the APT repository, from which the
+tag: the package and both images (with their `.sha256`) go into the GitHub release and, with the job `apt`, into the APT repository, from which the
 boxes update. The job needs the organization secrets `APT_HOST`, `APT_PORT`, `APT_REPO`, `APT_SSH_KEY` and
 `APT_KNOWN_HOSTS`; without them it is skipped.
 

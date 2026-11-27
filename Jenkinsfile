@@ -29,8 +29,8 @@
 //
 // IMAGES=false (environment or job parameter) builds only the package.
 //
-// Releases, the GitHub release and the APT repository (apt.mirranet.de) are made by GitHub
-// Actions (.github/workflows); Jenkins builds and archives the package and the images.
+// Releases, the GitHub release (with the images) and the APT repository (apt.mirranet.de) are made
+// by GitHub Actions (.github/workflows); Jenkins builds and archives the package and the images.
 
 pipeline {
     agent any
